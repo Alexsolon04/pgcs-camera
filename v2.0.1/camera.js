@@ -44,7 +44,7 @@ function finishCapture(reason){active=false;clearTimeout(deadlineTimer);if(recor
 window.addEventListener('message',event=>{const m=event.data;if(!valid||event.source!==window.opener||event.origin!==parentOrigin||!m||m.pgcsCamera!==1||m.channel!==channel)return;
  if(m.type==='ARM'){if(m.consentVersion!==CONSENT||!hasTracks()){fail(Error('Verifique os dispositivos antes de iniciar.'));return;}offset=Number(m.serverOffset)||0;deadline=Date.now()+offset+30000;if(active){send('STARTED',{audio:true,video:true,synthetic:false});return;}active=true;deadlineTimer=setTimeout(()=>finishCapture('INICIO_NAO_CONFIRMADO'),30000);try{beginSegment();}catch(e){fail(e);}}
  else if(m.type==='CHECK_MONITORS')reportMonitors();
- else if(m.type==='MONITOR_GATE'){document.querySelector('#monitorStatus').textContent=m.ok?'Verificação aceita'+(m.exception?' por exceção docente registrada.':'.'):m.status==='MULTIPLE'?'Desconecte os monitores estendidos antes de iniciar.':'Verificação pendente; regularize ou solicite exceção docente.';}
+ else if(m.type==='MONITOR_GATE'){document.querySelector('#monitorStatus').textContent=m.error|| (m.ok?'Verificação aceita'+(m.exception?' por exceção docente registrada.':'.'):m.status==='MULTIPLE'?'Desconecte os monitores estendidos antes de iniciar.':'Verificação pendente; regularize ou solicite exceção docente.');}
  else if(m.type==='START'){if(m.consentVersion!==CONSENT||!hasTracks()){fail(Error('Verifique câmera e microfone novamente.'));return;}offset=Number(m.serverOffset)||0;deadline=Number(m.deadline);if(!Number.isFinite(deadline)){fail(Error('Prazo de captura inválido.'));return;}clearTimeout(deadlineTimer);if(active){deadlineTimer=setTimeout(()=>finishCapture('PRAZO_ENCERRADO'),Math.max(0,deadline-Date.now()-offset));send('STARTED',{audio:true,video:true,synthetic:false});return;}active=true;deadlineTimer=setTimeout(()=>finishCapture('PRAZO_ENCERRADO'),Math.max(0,deadline-Date.now()-offset));try{beginSegment();}catch(e){fail(e);}}
  else if(m.type==='STOP')finishCapture('ENTREGA_REGISTRADA');
  else if(m.type==='RETURN_TARGET'){const link=document.querySelector('#returnExam');link.removeAttribute('href');link.removeAttribute('target');link.setAttribute('aria-disabled','false');}
@@ -68,10 +68,14 @@ function reportMonitors(denied){
  return report;
 }
 async function verifyMonitors(){
+ const status=document.querySelector('#monitorStatus');
+ if(!valid){status.textContent='Abra esta janela pelo botão da prova para verificar os monitores.';return;}
+ status.textContent='Verificando monitores. Se o navegador pedir permissão, responda para continuar.';
  try{
   if(typeof window.getScreenDetails!=='function'){reportMonitors(false);document.querySelector('#monitorStatus').textContent='Verificação completa indisponível. Solicite exceção docente; não será inferida pela resolução.';return;}
   if(!monitorDetails){monitorDetails=await window.getScreenDetails();monitorDetails.addEventListener('screenschange',()=>reportMonitors());monitorDetails.addEventListener('currentscreenchange',()=>reportMonitors());}
-  reportMonitors();
+  const report=reportMonitors();
+  status.textContent=report.count>1||report.extended?'Monitor estendido detectado. Desconecte-o antes de iniciar.':'Uma tela detectada. Aguardando confirmação da prova.';
  }catch(e){reportMonitors(e.name==='NotAllowedError');document.querySelector('#monitorStatus').textContent='Permissão não concedida ou API indisponível. Regularize ou solicite exceção docente.';}
 }
 document.querySelector('#verifyMonitors').onclick=verifyMonitors;
